@@ -1,6 +1,6 @@
-# μJSuite
+# JeSsi-Bench
 
-μJSuite is a tool that can run different workloads on different IoT-friendly JavaScript engines. Each engine is automatically built from source and gets executed inside a Docker container. This tool can be used to generate benchmarks and compare the performances of different engines.
+JeSsi-Bench is a tool that can run different workloads on different IoT-friendly JavaScript engines. Each engine is automatically built from source and gets executed inside a Docker container. This tool can be used to generate benchmarks and compare the performances of different engines.
 
 You can find collections of generated benchmarks in [this repository](https://github.com/loriswit/mjsuite-benchmarks).
 
@@ -8,7 +8,7 @@ You can find collections of generated benchmarks in [this repository](https://gi
 
 ### Prerequisite
 
-To run μJSuite, all you need is **Docker** to be installed on the target machine.
+To run JeSsi-Bench, all you need is **Docker** to be installed on the target machine.
 
 Make sure the `perf_event_paranoid` system variable is set to 2 or lower, as some Linux distributions seem to set it higher by default. This is required for μJSuite to be able to measure performance statistics. To fix this, run the following command:
 
