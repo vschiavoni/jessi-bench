@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-NODE_IMAGE=node:20.3.0-alpine
+NODE_IMAGE=node:25.9.0-alpine3.23
 ROOT_DIR=$(realpath "$(dirname "$0")/..")
 
 if [ ! -d "$ROOT_DIR"/build ]; then
