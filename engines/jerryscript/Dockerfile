@@ -1,4 +1,4 @@
-FROM python:3.11-alpine3.18 as build
+FROM python:3.11-alpine3.20 as build
 ARG srcPath
 WORKDIR /jerry
 
@@ -9,11 +9,11 @@ COPY $srcPath ./
 RUN python tools/build.py
 
 
-FROM alpine:3.18
-ARG timeRepo=http://dl-cdn.alpinelinux.org/alpine/edge/testing
+FROM alpine:3.23
 WORKDIR /jerry
 
-RUN apk --no-cache -X $timeRepo add perf time
+RUN apk --no-cache add perf
+RUN apk --no-cache -X https://dl-cdn.alpinelinux.org/alpine/v3.23/community add time
 
 COPY --from=build /jerry/build/bin/jerry /bin/
 

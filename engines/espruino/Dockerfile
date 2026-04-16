@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bullseye as build
+FROM python:3.11-slim-bookworm as build
 ARG srcPath
 WORKDIR /espruino
 
@@ -15,7 +15,7 @@ RUN bash -c "source scripts/provision.sh ALL"
 COPY $srcPath .
 RUN RELEASE=1 make
 
-FROM ubuntu:22.10
+FROM ubuntu:24.04
 WORKDIR /espruino
 
 RUN apt-get update && apt-get install -qq -y linux-tools-generic time

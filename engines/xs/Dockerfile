@@ -1,4 +1,4 @@
-FROM ubuntu:22.10 as build
+FROM ubuntu:24.04 as build
 ARG srcPath
 WORKDIR /moddable
 
@@ -10,7 +10,7 @@ WORKDIR /moddable/xs/makefiles/lin
 RUN MODDABLE=/moddable/ make release
 
 
-FROM ubuntu:22.10
+FROM ubuntu:24.04
 WORKDIR /xs
 
 RUN apt-get update && apt-get install -qq -y linux-tools-generic time
