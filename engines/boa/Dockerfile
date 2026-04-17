@@ -1,18 +1,18 @@
-FROM rust:1.94-alpine3.23 as build
+FROM rust:1.94-slim-trixie as build
 ARG srcPath
 WORKDIR /boa
 
-RUN apk --no-cache add gcc openssl-dev openssl-libs-static
+RUN apt-get update && apt-get install -qq -y build-essential pkg-config libssl-dev
 
 COPY $srcPath ./
 RUN cargo build --release
 
 
-FROM alpine:3.23
+FROM ubuntu:24.04
 WORKDIR /boa
 
-RUN apk --no-cache add perf
-RUN apk --no-cache -X https://dl-cdn.alpinelinux.org/alpine/v3.23/community add time
+RUN apt-get update && apt-get install -qq -y linux-tools-generic time
+RUN ln -sf /usr/lib/linux-tools/*-generic/perf /usr/bin/perf
 
 COPY --from=build /boa/target/release/boa /bin/
 

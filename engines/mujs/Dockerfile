@@ -1,18 +1,18 @@
-FROM alpine:3.23 as build
+FROM ubuntu:24.04 as build
 ARG srcPath
 WORKDIR /mujs
 
-RUN apk --no-cache add gcc musl-dev readline-dev make
+RUN apt-get update && apt-get install -qq -y build-essential libreadline-dev
 
 COPY $srcPath ./
 RUN make prefix=/usr/local install
 
 
-FROM alpine:3.23
+FROM ubuntu:24.04
 WORKDIR /mujs
 
-RUN apk --no-cache add perf
-RUN apk --no-cache -X https://dl-cdn.alpinelinux.org/alpine/v3.23/community add time
+RUN apt-get update && apt-get install -qq -y linux-tools-generic time libreadline8
+RUN ln -sf /usr/lib/linux-tools/*-generic/perf /usr/bin/perf
 
 COPY --from=build /usr/local/bin/mujs /bin/
 

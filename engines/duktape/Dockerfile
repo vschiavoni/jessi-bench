@@ -1,18 +1,18 @@
-FROM alpine:3.23 as build
+FROM ubuntu:24.04 as build
 ARG srcPath
 WORKDIR /duktape
 
-RUN apk --no-cache add gcc musl-dev make
+RUN apt-get update && apt-get install -qq -y build-essential
 
 COPY $srcPath ./
 RUN make -f Makefile.cmdline
 
 
-FROM alpine:3.23
+FROM ubuntu:24.04
 WORKDIR /duktape
 
-RUN apk --no-cache add perf
-RUN apk --no-cache -X https://dl-cdn.alpinelinux.org/alpine/v3.23/community add time
+RUN apt-get update && apt-get install -qq -y linux-tools-generic time
+RUN ln -sf /usr/lib/linux-tools/*-generic/perf /usr/bin/perf
 
 COPY --from=build /duktape/duk /bin/
 

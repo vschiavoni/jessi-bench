@@ -1,7 +1,6 @@
-FROM node:25.9.0-alpine3.23
+FROM node:25.9.0-trixie-slim
 WORKDIR /v8
 
-RUN apk --no-cache add perf
-RUN apk --no-cache -X https://dl-cdn.alpinelinux.org/alpine/v3.23/community add time
+RUN apt-get update && apt-get install -qq -y linux-perf time
 
 ENTRYPOINT ["node"]

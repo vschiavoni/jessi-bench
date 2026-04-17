@@ -1,19 +1,19 @@
-FROM python:3.11-alpine3.20 as build
+FROM python:3.14-slim-trixie as build
 ARG srcPath
 WORKDIR /jerry
 
-RUN apk --no-cache add gcc musl-dev make cmake
+RUN apt-get update && apt-get install -qq -y build-essential cmake
 RUN ln -s /usr/bin/gcc /usr/bin/aarch64-linux-gnu-gcc
 
 COPY $srcPath ./
 RUN python tools/build.py
 
 
-FROM alpine:3.23
+FROM ubuntu:24.04
 WORKDIR /jerry
 
-RUN apk --no-cache add perf
-RUN apk --no-cache -X https://dl-cdn.alpinelinux.org/alpine/v3.23/community add time
+RUN apt-get update && apt-get install -qq -y linux-tools-generic time
+RUN ln -sf /usr/lib/linux-tools/*-generic/perf /usr/bin/perf
 
 COPY --from=build /jerry/build/bin/jerry /bin/
 
