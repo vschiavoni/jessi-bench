@@ -1,6 +1,6 @@
 @echo off
 
-set NODE_IMAGE=node:25.9.0-alpine3.23
+set NODE_IMAGE=node:25.9.0-trixie
 set ROOT_DIR=%~dp0..
 
 if not exist %ROOT_DIR%\build\ (
