@@ -5,7 +5,7 @@ WORKDIR /boa
 RUN apt-get update && apt-get install -qq -y build-essential pkg-config libssl-dev
 
 COPY $srcPath ./
-RUN cargo build --release
+RUN cargo build -j 1 --release
 
 
 FROM ubuntu:24.04

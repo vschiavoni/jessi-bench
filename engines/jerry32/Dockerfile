@@ -3,7 +3,7 @@ ARG srcPath
 WORKDIR /jerry
 
 RUN apt-get update && apt-get install -qq -y build-essential cmake
-RUN ln -s /usr/bin/gcc /usr/bin/aarch64-linux-gnu-gcc
+RUN test -f /usr/bin/aarch64-linux-gnu-gcc || ln -s /usr/bin/gcc /usr/bin/aarch64-linux-gnu-gcc
 
 COPY $srcPath ./
 RUN python tools/build.py --cpointer-32bit=on --mem-heap=4096
