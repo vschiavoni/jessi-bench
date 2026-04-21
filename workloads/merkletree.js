@@ -1,4 +1,4 @@
-var N = 1e4; // iterations
+var N = 100; // iterations
 var S = 32; // number of leaves
 
 // js implementation of sha256
