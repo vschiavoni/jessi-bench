@@ -11,8 +11,8 @@ import {Benchmark} from "./commands/benchmark.js"
 import {Plot} from "./commands/plot.js"
 
 program
-    .name("mjsuite")
-    .description("μJSuite is a tool to benchmark IoT-friendly JavaScript engines")
+    .name("jessi-bench")
+    .description("jessi-bench is a tool to benchmark IoT-friendly JavaScript engines")
     .version(PKG_VERSION)
     .option("-v, --verbose", "print additional details for debugging purpose")
     .configureOutput({

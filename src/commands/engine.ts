@@ -49,7 +49,7 @@ export class Engine {
         }
 
         this.id = id
-        this.imageName = `mjsuite/${id}:${this.config.version}`
+        this.imageName = `jessi-bench/${id}:${this.config.version}`
     }
 
     public get name() {

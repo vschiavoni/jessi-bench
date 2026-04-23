@@ -100,7 +100,7 @@ async function runCommand(command: string[], engine: Engine, workloadFile: strin
 
     const [{StatusCode: exitCode}] = (await docker.run(
         engine.imageName,
-        ["/mjsuite/workload.js"],
+        ["/jessi-bench/workload.js"],
         containerStream,
         {
             Entrypoint: [...command, engine.entrypoint],
@@ -108,7 +108,7 @@ async function runCommand(command: string[], engine: Engine, workloadFile: strin
                 Mounts: [{
                     Type: "bind",
                     Source: workloadFile,
-                    Target: "/mjsuite/workload.js",
+                    Target: "/jessi-bench/workload.js",
                 }],
                 AutoRemove: true,
                 SecurityOpt: ["seccomp=unconfined"],

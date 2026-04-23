@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -e
+
+NODE_IMAGE=node:25.9.0-trixie
+ROOT_DIR=$(realpath "$(dirname "$0")/..")
+
+if [ ! -d "$ROOT_DIR"/build ]; then
+    echo -e "\e[94mWelcome to jessi-bench!"
+    echo -e "Performing first-time setup\e[0m"
+    docker run --rm -q --name jessi-bench \
+        -v "$ROOT_DIR":/jessi-bench \
+        $NODE_IMAGE /jessi-bench/bin/setup "$@"
+fi
+
+docker run --rm -itq --name jessi-bench \
+    -w /jessi-bench \
+    -v "$ROOT_DIR":/jessi-bench \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -e MOUNT_SRC="$ROOT_DIR" \
+    $NODE_IMAGE /jessi-bench/build/main "$@"
