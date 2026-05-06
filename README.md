@@ -10,13 +10,13 @@ You can find collections of generated benchmarks in [this repository](https://gi
 
 To run JeSsi-Bench, all you need is **Docker** to be installed on the target machine.
 
-Make sure the `perf_event_paranoid` system variable is set to 2 or lower, as some Linux distributions seem to set it higher by default. This is required for μJSuite to be able to measure performance statistics. To fix this, run the following command:
+Make sure the `perf_event_paranoid` system variable is set to 2 or lower, as some Linux distributions seem to set it higher by default. This is required for JeSsi-Bench to be able to measure performance statistics. To fix this, run the following command:
 
 ```
 sudo sysctl -w kernel.perf_event_paranoid=2
 ```
 
-There's no need to manually setup μJSuite. The first time you run the command line tool, it will automatically download dependencies and build the source code.
+There's no need to manually setup JeSsi-Bench. The first time you run the command line tool, it will automatically download dependencies and build the source code.
 
 ### Command line
 
@@ -35,7 +35,7 @@ bin/jessi-bench bm [options]
 
 This command runs all workloads with all engines and generates a benchmark. The results are then written into a JSON file. You can also specify which workloads and engines to run using the options below.
 
-When encountering a new engine, μJSuite will automatically download its source code and build a Docker image. This will take some time to complete, depending on the engine.
+When encountering a new engine, JeSsi-Bench will automatically download its source code and build a Docker image. This will take some time to complete, depending on the engine.
 
 The following options are available:
 
@@ -91,7 +91,7 @@ Saved results to benchmark_2023-06-12_19-29-22.json
 
 ### Current limitations
 
-Running `bin/jessi-bench` will start μJSuite inside a Docker container, which may cause errors on ARM machines. If you get errors during the setup about `lzma-native`, try installing Node.js manually, then install dependencies, build the source code and run μJSuite by calling `node` directly:
+Running `bin/jessi-bench` will start JeSsi-Bench inside a Docker container, which may cause errors on ARM machines. If you get errors during the setup about `lzma-native`, try installing Node.js manually, then install dependencies, build the source code and run JeSsi-Bench by calling `node` directly:
 
 ```
 npm install
@@ -115,10 +115,10 @@ Create a `manifest.json` containing an object with the following fields:
 - `repository`: the **GitHub** repository of the engine, in the form `user/repo`.
 - `version`: a git tag referencing the target version. If the `sha` property is provided, this becomes just informative.
 - `sha` (optional): the target commit SHA hash, which will overwrite the version tag. Helpful when the repository doesn't provide tags.
-- `source` (optional): a URL to the source code. If set, μJSuite will download from this URL instead of GitHub. Helpful with embeddable engines that provide pre-processed packaged source code.
+- `source` (optional): a URL to the source code. If set, JeSsi-Bench will download from this URL instead of GitHub. Helpful with embeddable engines that provide pre-processed packaged source code.
 - `clone` (optional): set to `true` to clone the repository instead of simply downloading it. This will take more time, but some engines require the source code to be in a git repository in order to be built.
 
-**Note**: when running μJSuite, the `engine` argument must match the name of the **folder**, not the name specified in the manifest.
+**Note**: when running JeSsi-Bench, the `engine` argument must match the name of the **folder**, not the name specified in the manifest.
 
 #### Dockerfile
 
@@ -155,4 +155,4 @@ For now, workloads cannot depend on external source files or assets (i.e. images
 
 ## Troubleshooting
 
-If μJSuite fails to work as expected, you can run it with the `--verbose` option. This will increase the amount of information being printed to the console, which can be helpful to resolve problems.
+If JeSsi-Bench fails to work as expected, you can run it with the `--verbose` option. This will increase the amount of information being printed to the console, which can be helpful to resolve problems.
