@@ -1,5 +1,5 @@
 import {Engine} from "./engine.js"
-import {Workload} from "./workload.js"
+import {Workload, WorkloadExecutionMode} from "./workload.js"
 import {docker} from "../services/docker.js"
 import {logger, LogLevel} from "../utils/logger.js"
 import {dirname, resolve} from "path"
@@ -22,23 +22,31 @@ export interface BenchmarkOptions {
     confidence: number
     metadata: boolean
     measurementMode: MeasurementMode
+    workloadMode: WorkloadExecutionMode
 }
 
 export interface RunSample {
     iteration: number
-    phase: "measurement"
-    measurementMode: MeasurementMode
     runTime?: number
     maxMemory?: number
     instructions?: number
     branches?: number
     branchMisses?: number
     pageFaults?: number
-    parseWarnings?: string[]
-    [event: EventId]: number | string | string[] | undefined
+    [event: EventId]: number | string | undefined
 }
 
 export type BenchmarkSummary = Record<string, NumericSummary>
+
+export interface ProcessStats {
+    runTime?: number
+    maxMemory?: number
+    instructions?: number
+    branches?: number
+    branchMisses?: number
+    pageFaults?: number
+    [event: EventId]: number | undefined
+}
 
 export interface BenchmarkMetadata {
     timestamp: string
@@ -54,7 +62,6 @@ export interface BenchmarkMetadata {
     engineId: string
     engineName: string
     dockerImage: string
-    measurementMode: MeasurementMode
     inContainer: boolean
     mountSource?: string
     packageVersion?: string
@@ -70,6 +77,8 @@ export interface BenchmarkResult {
     metadata?: BenchmarkMetadata
     samples: RunSample[]
     summary: BenchmarkSummary
+    processStats?: ProcessStats
+    parseWarnings?: string[]
     error?: string
 }
 
@@ -81,6 +90,7 @@ const DEFAULT_OPTIONS: BenchmarkOptions = {
     confidence: 0.95,
     metadata: true,
     measurementMode: "combined",
+    workloadMode: "script",
 }
 
 const PERF_EVENTS = [
@@ -117,9 +127,7 @@ export class Benchmark {
             stats[workloadKey] = {}
 
             for (const engine of this.engines) {
-                if (this.workloads.length > 1 || this.engines.length > 1) {
-                    logger.debug("\n====================\n")
-                }
+                if (this.workloads.length > 1 || this.engines.length > 1) logger.debug("\n====================\n")
 
                 const engineKey = toPascalCase(engine.id)
                 stats[workloadKey][engineKey] = await gatherBenchmark(workload, engine, this.options)
@@ -131,14 +139,13 @@ export class Benchmark {
 }
 
 function sanitizeOptions(options: BenchmarkOptions): BenchmarkOptions {
-    const measurementMode: MeasurementMode = options.measurementMode === "split" ? "split" : "combined"
-
     return {
         repetitions: Math.max(1, Math.floor(options.repetitions)),
         warmup: Math.max(0, Math.floor(options.warmup)),
         confidence: options.confidence,
         metadata: options.metadata,
-        measurementMode,
+        measurementMode: options.measurementMode,
+        workloadMode: options.workloadMode,
     }
 }
 
@@ -150,53 +157,37 @@ async function gatherBenchmark(
     if (!await docker.imageExists(engine.imageName)) await engine.setup()
 
     logger.info(`Running workload '${workload.id}' with engine ${engine.name}`)
-    logger.info(`> Measurement mode: ${options.measurementMode}`)
-    logger.info(`> Warm-up runs: ${options.warmup}; measured repetitions: ${options.repetitions}`)
+    logger.info(`> Workload mode: ${options.workloadMode}; measurement mode: ${options.measurementMode}`)
+    logger.info(`> Warm-up iterations/runs: ${options.warmup}; measured repetitions: ${options.repetitions}`)
 
     const filename = `${workload.id}__${engine.id}__${new Date().getTime()}.tmp.js`
     const workloadFile = resolve(PKG_ROOT, "workloads", "tmp", filename)
-
     await mkdir(dirname(workloadFile), {recursive: true})
-    await writeFile(workloadFile, workload.compile(engine))
 
-    // If JeSsi-Bench is running inside Docker, use the host path as mount source.
+    const compiledWorkload = options.workloadMode === "harnessed"
+        ? workload.compileHarnessed(engine, {warmup: options.warmup, repetitions: options.repetitions})
+        : workload.compile(engine)
+
+    await writeFile(workloadFile, compiledWorkload)
+
+    // If JeSsi-Bench is running inside Docker, use host path as mount source.
     const mountSourcePath = process.env.MOUNT_SRC
         ? workloadFile.replace(PKG_ROOT, process.env.MOUNT_SRC)
         : workloadFile
 
     try {
-        for (let i = 0; i < options.warmup; i++) {
-            logger.info(`> Warm-up ${i + 1}/${options.warmup}`)
-            await runWarmup(engine, mountSourcePath)
+        if (options.workloadMode === "harnessed") {
+            return await gatherHarnessedBenchmark(engine, mountSourcePath, options)
         }
 
-        const samples: RunSample[] = []
-
-        for (let i = 0; i < options.repetitions; i++) {
-            logger.info(`> Measured run ${i + 1}/${options.repetitions}`)
-            samples.push(await gatherOneSample(engine, mountSourcePath, i + 1, options.measurementMode))
-        }
-
-        const result: BenchmarkResult = {
-            config: options,
-            samples,
-            summary: summarizeSamples(samples, options.confidence),
-        }
-
-        if (options.metadata) {
-            result.metadata = await gatherMetadata(engine, options.measurementMode)
-        }
-
-        return result
+        return await gatherScriptBenchmark(engine, mountSourcePath, options)
     } catch (e: any) {
         logger.warn(e.message)
-        if (logger.logLevel !== LogLevel.DEBUG) {
-            logger.warn("Rerun with the `--verbose` option for more details")
-        }
+        if (logger.logLevel !== LogLevel.DEBUG) logger.warn("Rerun with the `--verbose` option for more details")
 
         return {
             config: options,
-            metadata: options.metadata ? await gatherMetadata(engine, options.measurementMode) : undefined,
+            metadata: options.metadata ? await gatherMetadata(engine) : undefined,
             samples: [],
             summary: {},
             error: e.message,
@@ -206,90 +197,120 @@ async function gatherBenchmark(
     }
 }
 
-async function runWarmup(engine: Engine, mountSourcePath: string): Promise<void> {
-    // Warm-up is a separate pre-measurement execution. It does not preserve
-    // process-local JIT/runtime state for the measured repetitions.
-    await runCommand([], engine, mountSourcePath)
+async function gatherScriptBenchmark(
+    engine: Engine,
+    mountSourcePath: string,
+    options: BenchmarkOptions,
+): Promise<BenchmarkResult> {
+    // Compatibility mode: the workload is an arbitrary self-contained script.
+    // Warm-up therefore means separate pre-measurement executions, not same-process JIT warm-up.
+    for (let i = 0; i < options.warmup; i++) {
+        logger.info(`> Compatibility warm-up run ${i + 1}/${options.warmup}`)
+        await gatherOneScriptSample(engine, mountSourcePath, i + 1, options.measurementMode)
+    }
+
+    const samples: RunSample[] = []
+    for (let i = 0; i < options.repetitions; i++) {
+        logger.info(`> Measured run ${i + 1}/${options.repetitions}`)
+        samples.push(await gatherOneScriptSample(engine, mountSourcePath, i + 1, options.measurementMode))
+    }
+
+    const result: BenchmarkResult = {
+        config: options,
+        samples,
+        summary: summarizeSamples(samples, options.confidence),
+    }
+
+    if (options.metadata) result.metadata = await gatherMetadata(engine)
+    return result
 }
 
-async function gatherOneSample(
+async function gatherHarnessedBenchmark(
+    engine: Engine,
+    mountSourcePath: string,
+    options: BenchmarkOptions,
+): Promise<BenchmarkResult> {
+    // Harnessed mode: one JS engine process performs all in-process warm-up iterations and
+    // all measured repetitions. This is the mode needed to warm JIT/compiler/runtime state.
+    logger.info(" > Running in-process warm-up and measured repetitions")
+
+    const output = options.measurementMode === "combined"
+        ? await runCommand([
+            "time",
+            "-v",
+            "perf",
+            "stat",
+            "-x,",
+            "-e",
+            PERF_EVENTS.join(","),
+        ], engine, mountSourcePath)
+        : await runCommand(["perf", "stat", "-x,", "-e", PERF_EVENTS.join(",")], engine, mountSourcePath)
+
+    const samples = parseHarnessSamples(output)
+    const processStats: ProcessStats = {
+        ...parsePerfOutput(output),
+        ...(options.measurementMode === "combined" ? {maxMemory: parseMaxMemory(output)} : {}),
+    }
+
+    if (options.measurementMode === "split") {
+        logger.info(" > Gathering process memory usage in a separate harness execution")
+        const timeOutput = await runCommand(["time", "-v"], engine, mountSourcePath)
+        processStats.maxMemory = parseMaxMemory(timeOutput)
+    }
+
+    const result: BenchmarkResult = {
+        config: options,
+        samples,
+        processStats,
+        summary: summarizeSamples(samples, options.confidence),
+    }
+
+    if (options.metadata) result.metadata = await gatherMetadata(engine)
+    return result
+}
+
+async function gatherOneScriptSample(
     engine: Engine,
     mountSourcePath: string,
     iteration: number,
     measurementMode: MeasurementMode,
 ): Promise<RunSample> {
-    if (measurementMode === "split") {
-        return gatherOneSampleSplit(engine, mountSourcePath, iteration)
+    if (measurementMode === "combined") {
+        logger.info(" > Gathering performance and memory stats in one execution")
+        const output = await runCommand([
+            "time",
+            "-v",
+            "perf",
+            "stat",
+            "-x,",
+            "-e",
+            PERF_EVENTS.join(","),
+        ], engine, mountSourcePath)
+
+        return {
+            iteration,
+            ...parsePerfOutput(output),
+            maxMemory: parseMaxMemory(output),
+        }
     }
 
-    return gatherOneSampleCombined(engine, mountSourcePath, iteration)
-}
-
-async function gatherOneSampleCombined(
-    engine: Engine,
-    mountSourcePath: string,
-    iteration: number,
-): Promise<RunSample> {
-    logger.info(" > Gathering performance and memory stats in one execution")
-
-    const output = await runCommand([
-        "/usr/bin/time",
-        "-v",
-        "perf",
-        "stat",
-        "-x,",
-        "-e",
-        PERF_EVENTS.join(","),
-    ], engine, mountSourcePath)
-
-    const perfStats = parsePerfOutput(output)
-    const timeStats = parseTimeOutput(output)
-    const parseWarnings = [...perfStats.parseWarnings, ...timeStats.parseWarnings]
-
-    return {
-        iteration,
-        phase: "measurement",
-        measurementMode: "combined",
-        ...perfStats.stats,
-        ...timeStats.stats,
-        ...(parseWarnings.length ? {parseWarnings} : {}),
-    }
-}
-
-async function gatherOneSampleSplit(
-    engine: Engine,
-    mountSourcePath: string,
-    iteration: number,
-): Promise<RunSample> {
     logger.info(" > Gathering performance stats")
-    const perfOutput = await runCommand([
-        "perf",
-        "stat",
-        "-x,",
-        "-e",
-        PERF_EVENTS.join(","),
-    ], engine, mountSourcePath)
+    let output = await runCommand(["perf", "stat", "-x,", "-e", PERF_EVENTS.join(",")], engine, mountSourcePath)
+
+    const sample: RunSample = {
+        iteration,
+        ...parsePerfOutput(output),
+    }
 
     logger.info(" > Gathering memory usage")
-    const timeOutput = await runCommand(["/usr/bin/time", "-v"], engine, mountSourcePath)
+    output = await runCommand(["time", "-v"], engine, mountSourcePath)
+    sample.maxMemory = parseMaxMemory(output)
 
-    const perfStats = parsePerfOutput(perfOutput)
-    const timeStats = parseTimeOutput(timeOutput)
-    const parseWarnings = [...perfStats.parseWarnings, ...timeStats.parseWarnings]
-
-    return {
-        iteration,
-        phase: "measurement",
-        measurementMode: "split",
-        ...perfStats.stats,
-        ...timeStats.stats,
-        ...(parseWarnings.length ? {parseWarnings} : {}),
-    }
+    return sample
 }
 
-function parsePerfOutput(output: string): {stats: Partial<RunSample>, parseWarnings: string[]} {
+function parsePerfOutput(output: string): Partial<RunSample> {
     const stats: Partial<RunSample> = {}
-    const parseWarnings: string[] = []
 
     for (const line of output.split(/\r?\n/)) {
         const cells = line.split(",")
@@ -318,34 +339,41 @@ function parsePerfOutput(output: string): {stats: Partial<RunSample>, parseWarni
         }
     }
 
-    if (!stats.runTime) parseWarnings.push("Failed to parse task-clock runtime from perf output")
-    if (!stats.instructions) parseWarnings.push("Failed to parse instructions from perf output")
-    if (!stats.branches) parseWarnings.push("Failed to parse branches from perf output")
-    if (!stats.branchMisses) parseWarnings.push("Failed to parse branch misses from perf output")
-    if (!stats.pageFaults) parseWarnings.push("Failed to parse page faults from perf output")
-
-    if (!stats.runTime) {
-        throw new Error("Failed to measure runtime with perf")
-    }
-
-    return {stats, parseWarnings}
+    if (!stats.runTime) throw new Error("Failed to measure runtime with perf")
+    return stats
 }
 
-function parseTimeOutput(output: string): {stats: Partial<RunSample>, parseWarnings: string[]} {
-    const parseWarnings: string[] = []
+function parseMaxMemory(output: string): number {
     const maxMemory = output.match(/^\s*Maximum resident set size \(kbytes\): (\d+)/m)?.[1]
+    if (!maxMemory) throw new Error("Failed to measure max memory usage")
+    return parseInt(maxMemory) * 1000
+}
 
-    if (!maxMemory) {
-        parseWarnings.push("Failed to parse maximum resident set size from GNU time output")
-        throw new Error("Failed to measure max memory usage")
+function parseHarnessSamples(output: string): RunSample[] {
+    const samples: RunSample[] = []
+
+    for (const line of output.split(/\r?\n/)) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith("{")) continue
+
+        try {
+            const event = JSON.parse(trimmed)
+            if (event.type !== "jessi-bench-sample") continue
+
+            samples.push({
+                iteration: event.iteration,
+                runTime: event.runTime,
+            })
+        } catch {
+            // Ignore non-JSON workload output.
+        }
     }
 
-    return {
-        stats: {
-            maxMemory: parseInt(maxMemory) * 1000,
-        },
-        parseWarnings,
+    if (samples.length === 0) {
+        throw new Error("Harnessed workload did not emit any jessi-bench-sample records")
     }
+
+    return samples
 }
 
 function summarizeSamples(samples: RunSample[], confidence: number): BenchmarkSummary {
@@ -354,15 +382,7 @@ function summarizeSamples(samples: RunSample[], confidence: number): BenchmarkSu
 
     for (const sample of samples) {
         for (const [key, value] of Object.entries(sample)) {
-            if (
-                key !== "iteration" &&
-                key !== "phase" &&
-                key !== "measurementMode" &&
-                key !== "parseWarnings" &&
-                typeof value === "number"
-            ) {
-                keys.add(key)
-            }
+            if (key !== "iteration" && typeof value === "number") keys.add(key)
         }
     }
 
@@ -378,7 +398,7 @@ function summarizeSamples(samples: RunSample[], confidence: number): BenchmarkSu
     return summary
 }
 
-async function gatherMetadata(engine: Engine, measurementMode: MeasurementMode): Promise<BenchmarkMetadata> {
+async function gatherMetadata(engine: Engine): Promise<BenchmarkMetadata> {
     const cpus = os.cpus()
 
     return {
@@ -395,7 +415,6 @@ async function gatherMetadata(engine: Engine, measurementMode: MeasurementMode):
         engineId: engine.id,
         engineName: engine.name,
         dockerImage: engine.imageName,
-        measurementMode,
         inContainer: IN_CONTAINER,
         mountSource: process.env.MOUNT_SRC,
         packageVersion: PKG_VERSION,

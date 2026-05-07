@@ -22,14 +22,12 @@ export class Plot {
         this.plots = stats.map(({title, id: statId, scale}) => ({
             title,
             plot: Object.entries(benchmark).map(([workloadId, engineStats]) => {
-                const filtered = Object.fromEntries(
-                    Object.entries(engineStats)
-                        .filter(([_, result]) => hasSummaryStat(result, statId)),
-                )
+                const filtered = Object.fromEntries(Object.entries(engineStats)
+                    .filter(([_, result]) => hasSummaryStat(result, statId)))
 
                 return {
                     name: workloadId,
-                    x: Object.keys(filtered).map(engineId => engineLabel(engineId, filtered[engineId])),
+                    x: Object.keys(filtered),
                     y: Object.values(filtered).map(result => result.summary[statId].mean * scale),
                     error_y: {
                         type: "data",
@@ -47,13 +45,10 @@ export class Plot {
         if (IN_CONTAINER) {
             throw new Error(
                 "Drawing plots inside a Docker container is not yet supported.\n" +
-                "Please install Node.js and run `node build/main plot` instead.",
-            )
+                "Please install Node.js and run `node build/main plot` instead.")
         }
 
-        for (const entry of this.plots) {
-            plot(entry.plot, {title: {text: entry.title}})
-        }
+        for (const entry of this.plots) plot(entry.plot, {title: {text: entry.title}})
     }
 }
 
@@ -63,17 +58,10 @@ function hasSummaryStat(result: BenchmarkResult, statId: string): boolean {
 
 function ciHighError(result: BenchmarkResult, statId: string): number {
     const summary = result.summary[statId]
-    const interval = summary.confidenceInterval ?? summary.ci95
-    return Math.max(0, interval.high - summary.mean)
+    return Math.max(0, summary.ci.high - summary.mean)
 }
 
 function ciLowError(result: BenchmarkResult, statId: string): number {
     const summary = result.summary[statId]
-    const interval = summary.confidenceInterval ?? summary.ci95
-    return Math.max(0, summary.mean - interval.low)
-}
-
-function engineLabel(engineId: string, result: BenchmarkResult): string {
-    const mode = result.config?.measurementMode
-    return mode ? `${engineId} (${mode})` : engineId
+    return Math.max(0, summary.mean - summary.ci.low)
 }

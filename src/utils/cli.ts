@@ -9,12 +9,13 @@ export function actionWrapper(action: (...args: any[]) => void | Promise<void>) 
         try {
             await action(...args)
         } catch (error: any) {
-            if (error.code === "ENOENT" && error.syscall === "connect")
+            if (error.code === "ENOENT" && error.syscall === "connect") {
                 logger.error("Connection to Docker Engine failed")
-            else {
+            } else {
                 logger.error("An error occurred!")
                 logger.error(error.message)
             }
+
             logger.debug(error)
             logger.debug(error.stack)
             process.exit(1)
@@ -22,44 +23,43 @@ export function actionWrapper(action: (...args: any[]) => void | Promise<void>) 
     }
 }
 
-
 /**
- *  * Parse list of filtered engines/workloads.
- *   *
- *    * Accepts:
- *     *   undefined
- *      *   a single string
- *       *   an array of strings
- *        *
- *         * Examples:
- *          *   quickjs
- *           *   ["quickjs", "v8"]
- *            *   ["!v8"]
- *             *
- *              * @param items The provided values
- *               * @param all All possible values
- *                */
+ * Parse list of filtered engines/workloads.
+ *
+ * Accepts:
+ *   undefined
+ *   a single string
+ *   an array of strings
+ *
+ * Examples:
+ *   quickjs
+ *   ["quickjs", "v8"]
+ *   ["!v8"]
+ *
+ * @param items The provided values
+ * @param all All possible values
+ */
 export function parseFilter<T extends string>(
-	items: T | T[] | undefined,
-	all: T[]
+    items: T | T[] | undefined,
+    all: T[],
 ): T[] {
-	if (!items) return all
+    if (!items) return all
 
-		const values = Array.isArray(items) ? items : [items]
+    const values = Array.isArray(items) ? items : [items]
 
-		const included = values.filter(id => !id.startsWith("!"))
-		const excluded = values
-		.filter(id => id.startsWith("!"))
-		.map(id => id.slice(1) as T)
+    const included = values.filter(id => !id.startsWith("!"))
+    const excluded = values
+        .filter(id => id.startsWith("!"))
+        .map(id => id.slice(1) as T)
 
-		if (excluded.length) {
-			return [
-				...new Set([
-					...included,
-					...all.filter(id => !excluded.includes(id)),
-				]),
-			]
-		}
+    if (excluded.length) {
+        return [
+            ...new Set([
+                ...included,
+                ...all.filter(id => !excluded.includes(id)),
+            ]),
+        ]
+    }
 
-		return included
+    return included
 }
