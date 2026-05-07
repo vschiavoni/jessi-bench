@@ -24,8 +24,8 @@ program
     .description("Generate a benchmark for all workloads and all engines and store results in a JSON file.\n" +
         "You can also specify which workloads and engines to run.")
     .summary("generate a benchmark")
-    .option("-w, --workload <filter>", "the workload(s) to run (default: all)")
-    .option("-e, --engine <filter>", "the engine(s) to use (default: all)")
+    .option("-w, --workload <workload...>", "the workload(s) to run (default: all)")
+    .option("-e, --engine <engine...>", "the engine(s) to use (default: all)")
     .option("-o, --output <file>", "the output file that will store the results")
     .option("-p, --plot", "displays plots once the benchmark is generated")
     .option("-r, --repetitions <number>", "number of measured repetitions", "30")
