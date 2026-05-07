@@ -43,6 +43,10 @@ The following options are available:
 - `-e`, `--engine <engines...>`: the engine(s) to use (default: all).
 - `-o`, `--output <filename>`: the output file that will store the results.
 - `-p`, `--plot`: display plots immediately after the benchmark is generated.
+- `-r`, `--repetitions <number>`: number of measured repetitions, default 30.
+- `--warmup <number>`: number of separate pre-measurement executions and do not preserve engine/JIT state across measured repetitions.[EXPERIMENTAL: rename to --preruns]
+- `--confidence <number>`: confidence level used for statistical summaries, default 0.95.
+- `--no-metadata`: disable collection of machine/environment metadata.
 
 The `--workload` and `--engine` options also support **negative** filtering. For example, running `bin/jessi-bench benchmark --engine !jerryscript` will select every engine **except** JerryScript.
 
