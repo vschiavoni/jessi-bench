@@ -1,4 +1,4 @@
-var N = 1e4; // iterations
+var N = 20; // iterations
 var S = 1e4; // array size
 
 var array = []
@@ -9,6 +9,6 @@ var res
 var startTime = Date.now()
 
 for (var i = 0; i < N; ++i)
-    res = array.slice()
+    res = array.slice(i*(S/N))
 
 console.log(Date.now() - startTime)

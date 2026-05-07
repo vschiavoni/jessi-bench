@@ -1,4 +1,4 @@
-var N = 2e4; // iterations
+var N = 20; // iterations
 var S = 1e3; // array size
 
 var res

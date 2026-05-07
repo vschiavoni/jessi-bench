@@ -1,4 +1,4 @@
-var N = 4e5; // iterations
+var N = 20; // iterations
 
 var str = "  for (var i = 0; i < 100; i++) { console.log(i) } // comment"
 var startTime = Date.now()

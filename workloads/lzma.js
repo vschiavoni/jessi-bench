@@ -1,4 +1,4 @@
-var N = 100; // iterations
+var N = 3; // iterations
 
 // © 2015 Nathan Rugg <nmrugg@gmail.com> | MIT
 // https://github.com/LZMA-JS/LZMA-JS

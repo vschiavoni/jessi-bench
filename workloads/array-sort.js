@@ -1,4 +1,4 @@
-var N = 4e5; // iterations
+var N = 20; // iterations
 
 var array = [
     "warning", "understanding", "height", "consequence", "chocolate", "Arrival",

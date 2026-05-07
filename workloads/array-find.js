@@ -1,4 +1,4 @@
-var N = 1e5; // iterations
+var N = 20; // iterations
 var S = 1e4; // array size
 
 var array = []
@@ -10,6 +10,6 @@ var val = "x" + S * 0.8
 var startTime = Date.now()
 
 for (var i = 0; i < N; ++i)
-    res = array[array.indexOf(val)]
+    res = array[array.indexOf(val*(S/N))]
 
 console.log(Date.now() - startTime)

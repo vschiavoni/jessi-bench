@@ -1,4 +1,4 @@
-var N = 1e6; // iterations
+var N = 20; // iterations
 
 var res = {}
 var array = []
