@@ -2,75 +2,107 @@
 
 JeSsi-Bench is a tool that can run different workloads on different IoT-friendly JavaScript engines. Each engine is automatically built from source and gets executed inside a Docker container. This tool can be used to generate benchmarks and compare the performances of different engines.
 
-You can find collections of generated benchmarks in [this repository](https://github.com/loriswit/mjsuite-benchmarks).
-
 ## Usage
 
 ### Prerequisite
 
-To run JeSsi-Bench, all you need is **Docker** to be installed on the target machine.
+To run JeSsi-Bench, all you need is **Docker** to be installed on the target machine. Make sure the `perf_event_paranoid` system variable is set to 2 or lower, as some Linux distributions seem to set it higher by default. This is required for JeSsi-Bench to be able to measure performance statistics.
 
-Make sure the `perf_event_paranoid` system variable is set to 2 or lower, as some Linux distributions seem to set it higher by default. This is required for JeSsi-Bench to be able to measure performance statistics. To fix this, run the following command:
-
-```
+```bash
 sudo sysctl -w kernel.perf_event_paranoid=2
 ```
 
-There's no need to manually setup JeSsi-Bench. The first time you run the command line tool, it will automatically download dependencies and build the source code.
-
 ### Command line
 
-Clone or download this repository, then run `bin/jessi-bench` (or `bin\jessi-bench` on Windows) from the root of the project. To get a list of available commands and options, run `bin/jessi-bench help`.
+Clone or download this repository, then run `bin/jessi-bench` from the root of the project. To get a list of available commands and options, run:
 
-When requested as an argument or option, a **workload** must match a script in the `workloads` directory (without the `.js` extension), and an **engine** must match one of the folders in the `engines` directory.
+```bash
+bin/jessi-bench help
+```
 
-All available commands are described below. Each of them provides a `--help` option that displays additional information about their usage.
+When requested as an argument or option, a **workload** must match a script in the `workloads` directory without the `.js` extension, and an **engine** must match one of the folders in the `engines` directory.
 
 #### Benchmark
 
-```
+```bash
 bin/jessi-bench benchmark [options]
 bin/jessi-bench bm [options]
 ```
 
-This command runs all workloads with all engines and generates a benchmark. The results are then written into a JSON file. You can also specify which workloads and engines to run using the options below.
-
-When encountering a new engine, JeSsi-Bench will automatically download its source code and build a Docker image. This will take some time to complete, depending on the engine.
+This command runs workloads with engines and generates a benchmark JSON file. When encountering a new engine, JeSsi-Bench automatically downloads its source code and builds a Docker image.
 
 The following options are available:
 
-- `-w`, `--workload <workloads...>`: the workload(s) to run (default: all). 
-- `-e`, `--engine <engines...>`: the engine(s) to use (default: all).
-- `-o`, `--output <filename>`: the output file that will store the results.
+- `-w`, `--workload <workload...>`: workload(s) to run, default: all.
+- `-e`, `--engine <engine...>`: engine(s) to use, default: all.
+- `-o`, `--output <file>`: output file that will store the results.
 - `-p`, `--plot`: display plots immediately after the benchmark is generated.
-- `-r`, `--repetitions <number>`: number of measured repetitions, default 30.
-- `--warmup <number>`: number of separate pre-measurement executions and do not preserve engine/JIT state across measured repetitions.[EXPERIMENTAL: rename to --preruns]
-- `--confidence <number>`: confidence level used for statistical summaries, default 0.95.
+- `-r`, `--repetitions <number>`: number of measured repetitions, default: 30.
+- `--warmup <number>`: number of separate pre-measurement executions, default: 5.
+- `--confidence <number>`: confidence level used for statistical summaries, default: 0.95.
+- `--measurement-mode <combined|split>`: select how runtime/performance counters and memory usage are measured, default: `combined`.
 - `--no-metadata`: disable collection of machine/environment metadata.
 
-The `--workload` and `--engine` options also support **negative** filtering. For example, running `bin/jessi-bench benchmark --engine !jerryscript` will select every engine **except** JerryScript.
+The `--workload` and `--engine` options also support negative filtering. For example:
+
+```bash
+bin/jessi-bench benchmark --engine '!jerryscript'
+```
+
+selects every engine except JerryScript.
+
+##### Measurement modes
+
+JeSsi-Bench supports two measurement modes:
+
+- `combined`: runtime, performance counters, and maximum resident set size are collected from the same process execution using `/usr/bin/time -v perf stat ...`. This is the default and recommended mode for publishable results.
+- `split`: runtime/performance counters and memory usage are collected from two separate executions. This can be useful if `time` and `perf` interact badly for a given platform or engine, but each sample combines metrics from different process executions.
+
+Warm-up runs are currently separate pre-measurement executions. They help reduce cold-start effects such as Docker/image/filesystem effects, but they do **not** preserve process-local JIT/runtime state for measured repetitions.
+
+Example:
+
+```bash
+bin/jessi-bench benchmark \
+  --workload array-sort \
+  --engine quickjs \
+  --warmup 5 \
+  --repetitions 30 \
+  --measurement-mode combined \
+  --output res.json
+```
+
+To reproduce the older split-execution behaviour:
+
+```bash
+bin/jessi-bench benchmark \
+  --workload array-sort \
+  --engine quickjs \
+  --warmup 5 \
+  --repetitions 30 \
+  --measurement-mode split \
+  --output res.json
+```
 
 #### Engine
 
-To list all available engines, run:
+To list all available JavaScript engines, run:
 
-```
+```bash
 bin/jessi-bench engine list
 ```
 
 To download and build a specific engine, run:
 
-```
+```bash
 bin/jessi-bench engine setup <engine>
 ```
-
-Note that this is done automatically when the `benchmark` command encounters a new engine. Running this command again will **rebuild** the engine and overwrite the existing image.
 
 #### Workload
 
 To list all available workloads, run:
 
-```
+```bash
 bin/jessi-bench workload list
 ```
 
@@ -78,85 +110,36 @@ bin/jessi-bench workload list
 
 To draw plots for an already generated benchmark, run:
 
-```
+```bash
 bin/jessi-bench plot <benchmark>
 ```
 
-where `<benchmark>` is a path to the target JSON file (previously generated by the `benchmark` command).
-
-#### Example
-
-```
-❯ bin/jessi-bench benchmark --workload array-sort --engine jerryscript --plot
-Running workload 'array-sort' with engine JerryScript
-Workload finished in 853 ms
-Saved results to benchmark_2023-06-12_19-29-22.json
-```
+where `<benchmark>` is a path to the target JSON file.
 
 ### Current limitations
 
-Running `bin/jessi-bench` will start JeSsi-Bench inside a Docker container, which may cause errors on ARM machines. If you get errors during the setup about `lzma-native`, try installing Node.js manually, then install dependencies, build the source code and run JeSsi-Bench by calling `node` directly:
+Running `bin/jessi-bench` starts JeSsi-Bench inside a Docker container, which may cause errors on ARM machines.
 
-```
+If you get errors during the setup about `lzma-native`, try installing Node.js manually, then install dependencies, build the source code, and run JeSsi-Bench by calling `node` directly:
+
+```bash
 npm install
 npm run build
-node build/main <arg...>
+node build/main <command>
 ```
 
-Drawing plots is also not supported inside Docker containers, so follow the same process if needed.
+Drawing plots is not supported inside Docker containers, so follow the same process if needed.
 
 ## Contributing
 
 ### Adding an engine
 
-To add a new engine to the project, create a new folder in the `engines` directory. This folder must contain a manifest file, a Dockerfile and a workload template (optional).
-
-#### Manifest
-
-Create a `manifest.json` containing an object with the following fields:
-
-- `name`: the name of the engine.
-- `repository`: the **GitHub** repository of the engine, in the form `user/repo`.
-- `version`: a git tag referencing the target version. If the `sha` property is provided, this becomes just informative.
-- `sha` (optional): the target commit SHA hash, which will overwrite the version tag. Helpful when the repository doesn't provide tags.
-- `source` (optional): a URL to the source code. If set, JeSsi-Bench will download from this URL instead of GitHub. Helpful with embeddable engines that provide pre-processed packaged source code.
-- `clone` (optional): set to `true` to clone the repository instead of simply downloading it. This will take more time, but some engines require the source code to be in a git repository in order to be built.
-
-**Note**: when running JeSsi-Bench, the `engine` argument must match the name of the **folder**, not the name specified in the manifest.
-
-#### Dockerfile
-
-The Dockerfile must describe how to build the source code of the engine. When executed, the Dockerfile receives `srcPath` as an argument, which contains the full path to the source code. This argument can be used to copy the source code into the image (e.g., `COPY $srcPath ./`)
-
-Once the engine is compiled, we want the image to only contain the executable (and its dependencies, if any) without all the build tools and cache. This can be achieved with [multi-stage builds](https://docs.docker.com/build/building/multi-stage/). We also need the final image to include **both** the [Perf](https://perf.wiki.kernel.org/) and [GNU Time](https://www.gnu.org/software/time/) tools. Make sure to provide a version of GNU Time that is recent enough, as older versions are known to [report wrong measurements](https://bugzilla.redhat.com/show_bug.cgi?id=702826).
-
-The entry point of the container **must** be set to the engine executable file and must not include arguments.
-
-#### Workload template
-
-Since different engines can have different specifications, some of them may need some adjustments before being able to run a workload (e.g., the `console.log` function could be named differently). If such adjustments are needed, we can create a `template.js` file with the following syntax:
-
-```js
-// code being executed before the workload
-const console = { log: print }
-
-// workload will be inserted here
-${workload}
-
-// code being executed after the workload
-print(duration)
-```
-
-If no adjustments are needed, there's no need to create this file.
+To add a new engine to the project, create a new folder in the `engines` directory. This folder must contain a manifest file, a Dockerfile, and optionally a workload template.
 
 ### Adding a workload
 
-To add a new workload, simply create a JavaScript file in the `workloads` directory. As a convention, workloads should start with the line `var N = #`, which specifies the number of iterations in the workload.
-
-Workloads should follow older ECMAScript standards so that most engines will be able to run it. Note that engines that can't process a workload will be skipped during benchmark generation.
-
-For now, workloads cannot depend on external source files or assets (i.e. images). The whole code and data must reside inside a single JavaScript file.
+To add a new workload, create a JavaScript file in the `workloads` directory. Workloads should be self-contained and should follow older ECMAScript standards so that most engines can run them.
 
 ## Troubleshooting
 
-If JeSsi-Bench fails to work as expected, you can run it with the `--verbose` option. This will increase the amount of information being printed to the console, which can be helpful to resolve problems.
+If JeSsi-Bench fails to work as expected, run it with the `--verbose` option.
