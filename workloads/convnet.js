@@ -2278,31 +2278,37 @@ var convnetjs = convnetjs || {REVISION: 'ALPHA'};
 
 var W = 32, H = 32, D = 3;
 
-var layer_defs = [];
-layer_defs.push({type: 'input', out_sx: W, out_sy: H, out_depth: D});
-layer_defs.push({type: 'conv', sx: 5, filters: 16, stride: 1, pad: 2, activation: 'relu'});
-layer_defs.push({type: 'pool', sx: 2, stride: 2});
-layer_defs.push({type: 'conv', sx: 5, filters: 20, stride: 1, pad: 2, activation: 'relu'});
-layer_defs.push({type: 'pool', sx: 2, stride: 2});
-layer_defs.push({type: 'conv', sx: 5, filters: 20, stride: 1, pad: 2, activation: 'relu'});
-layer_defs.push({type: 'pool', sx: 2, stride: 2});
-layer_defs.push({type: 'softmax', num_classes: 10});
+function benchmark() {
+    var layer_defs = [];
+    layer_defs.push({type: 'input', out_sx: W, out_sy: H, out_depth: D});
+    layer_defs.push({type: 'conv', sx: 5, filters: 16, stride: 1, pad: 2, activation: 'relu'});
+    layer_defs.push({type: 'pool', sx: 2, stride: 2});
+    layer_defs.push({type: 'conv', sx: 5, filters: 20, stride: 1, pad: 2, activation: 'relu'});
+    layer_defs.push({type: 'pool', sx: 2, stride: 2});
+    layer_defs.push({type: 'conv', sx: 5, filters: 20, stride: 1, pad: 2, activation: 'relu'});
+    layer_defs.push({type: 'pool', sx: 2, stride: 2});
+    layer_defs.push({type: 'softmax', num_classes: 10});
 
-net = new convnetjs.Net();
-net.makeLayers(layer_defs);
+    var net = new convnetjs.Net();
+    net.makeLayers(layer_defs);
 
-var x = new convnetjs.Vol(W, H, D);
+    var x = new convnetjs.Vol(W, H, D);
+    var prob1 = net.forward(x);
 
-var prob1 = net.forward(x);
-console.log(prob1.w[0]);
+    var trainer = new convnetjs.SGDTrainer(net, {learning_rate: 0.01, l2_decay: 0.001});
+    for (var i = 0; i < N; i++) {
+        x = new convnetjs.Vol(W, H, D);
+        var label = Math.floor(Math.random() * 10);
+        trainer.train(x, label);
+    }
 
-var trainer = new convnetjs.SGDTrainer(net, {learning_rate: 0.01, l2_decay: 0.001});
-for (var i = 0; i < N; i++) {
-    x = new convnetjs.Vol(W, H, D);
-    var label = Math.floor(Math.random() * 10)
-
-    trainer.train(x, label);
+    var prob2 = net.forward(x);
+    return prob1.w[0] + prob2.w[0];
 }
 
-var prob2 = net.forward(x);
-console.log(prob2.w[0]);
+if (typeof __JESSI_BENCH_HARNESS__ === "undefined") {
+    var startTime = Date.now();
+    var result = benchmark();
+    console.log(result);
+    console.log(Date.now() - startTime);
+}

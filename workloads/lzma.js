@@ -2577,17 +2577,27 @@ var input =
     "Aliquam a diam quis libero finibus suscipit a ut massa. Phasellus turpis turpis, vulputate" +
     "at est quis, dictum aliquam nunc."
 
-var output
-var startTime = Date.now()
+function benchmark() {
+    var output;
+    for (var i = 0; i < N; i++) {
+        output = LZMA.compress(input);
+    }
 
-for (var i = 0; i < N; i++)
-    output = LZMA.compress(input)
+    var res;
+    for (var j = 0; j < N; j++) {
+        res = LZMA.decompress(output);
+    }
 
-var res
-for (var i = 0; i < N; i++)
-    res = LZMA.decompress(output)
+    if (res !== input) {
+        throw new Error("LZMA round-trip failed");
+    }
 
-console.log(input.length)
-console.log(output.length)
-console.log(res === input)
-console.log(Date.now() - startTime)
+    return input.length + output.length + res.length;
+}
+
+if (typeof __JESSI_BENCH_HARNESS__ === "undefined") {
+    var startTime = Date.now();
+    var result = benchmark();
+    console.log(result);
+    console.log(Date.now() - startTime);
+}

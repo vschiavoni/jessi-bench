@@ -1,16 +1,21 @@
 var N = 20; // iterations
 var D = 1e4; // chain depth
 
-var res
-var startTime = Date.now()
-
-for (var i = 0; i < N; ++i) {
-    var obj = {prop: 12345}
+function benchmark() {
+  var res = 0;
+  for (var i = 0; i < N; ++i) {
+    var obj = { prop: 12345 };
     for (var j = 0; j < D; ++j) {
-        obj = Object.create(obj)
-        res = obj.prop
+      obj = Object.create(obj);
+      res = obj.prop;
     }
+  }
+  return res;
 }
 
-console.log(res)
-console.log(Date.now() - startTime)
+if (typeof __JESSI_BENCH_HARNESS__ === "undefined") {
+  var startTime = Date.now();
+  var result = benchmark();
+  if (typeof console !== "undefined" && console.log) console.log(result);
+  console.log(Date.now() - startTime);
+}
