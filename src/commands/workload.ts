@@ -3,6 +3,7 @@ import {readdir, readFile} from "fs/promises"
 import {resolve} from "path"
 import {Engine} from "./engine.js"
 import {logger} from "../utils/logger.js"
+import {getTagsForId, loadTagConfig} from "../utils/tags.js"
 
 export type WorkloadId = string
 export type WorkloadExecutionMode = "script" | "harnessed"
@@ -22,7 +23,6 @@ export class Workload {
         } catch (e: any) {
             throw new Error(`Invalid workload '${id}' (${e.message})`)
         }
-
         this.id = id
     }
 
@@ -44,10 +44,10 @@ export class Workload {
      *
      * Harnessed workloads must define a global function named `benchmark`:
      *
-     *     function benchmark() {
-     *         // one logical benchmark operation
-     *         return someValue
-     *     }
+     * function benchmark() {
+     *     // one logical benchmark operation
+     *     return someValue
+     * }
      *
      * Warm-up iterations and measured repetitions are then executed inside the same JS engine
      * process, so JIT/compiler/runtime state can actually be warmed up.
@@ -83,12 +83,18 @@ export class Workload {
             .sort((a, b) => a.localeCompare(b))
     }
 
-    public static async listAll(): Promise<{ id: string, lines: number }[]> {
+    public static async listAll(tagConfigPath?: string): Promise<{ id: string, lines: number, tags: string }[]> {
         const ids = await Workload.getAllIds()
+        const tagConfig = loadTagConfig(tagConfigPath)
+
         return await Promise.all(ids.map(async id => {
             const buf = await readFile(resolve(PKG_ROOT, "workloads", id + ".js"))
             const lines = buf.toString().split("\n").length
-            return {id, lines}
+            return {
+                id,
+                lines,
+                tags: getTagsForId(tagConfig.workloads, id).join(", "),
+            }
         }))
     }
 }
@@ -133,7 +139,6 @@ function buildHarnessSource(options: HarnessOptions): string {
         var result = benchmark();
         var end = nowMs();
         consume(result);
-
         console.log(JSON.stringify({
             type: "jessi-bench-sample",
             iteration: j + 1,

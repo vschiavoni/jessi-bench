@@ -5,6 +5,7 @@ import {docker} from "../services/docker.js"
 import {mkdir, readdir, rename, rm} from "fs/promises"
 import {logger} from "../utils/logger.js"
 import {download, extractArchive} from "../utils/helpers.js"
+import {getTagsForId, loadTagConfig} from "../utils/tags.js"
 
 const CACHE_PATH = resolve(PKG_ROOT, "engines", "cache")
 
@@ -32,18 +33,16 @@ export class Engine {
         try {
             let buffer = readFileSync(resolve(PKG_ROOT, "engines", id, "manifest.json"), "utf-8")
             this.config = JSON.parse(buffer)
-            if (!this.config.name || !this.config.repository || !this.config.version)
-                throw new Error("bad manifest")
+            if (!this.config.name || !this.config.repository || !this.config.version) throw new Error("bad manifest")
 
             // extract entrypoint from Dockerfile
             buffer = readFileSync(resolve(PKG_ROOT, "engines", id, "Dockerfile"), "utf-8")
-            const match = buffer.match(/^\s*ENTRYPOINT \["(\w+)"]/m)
+            const match = buffer.match(/^\s*ENTRYPOINT \["([^"]+)"\]/m)
             if (!match) throw new Error("bad ENTRYPOINT in Dockerfile")
             this.entrypoint = match[1]
 
             // determine if the engine is being built from its source code
             this.buildFromSource = /^\s*ARG\s+srcPath\s*$/m.test(buffer)
-
         } catch (e: any) {
             throw new Error(`Invalid engine '${id}' (${e.message})`)
         }
@@ -63,8 +62,9 @@ export class Engine {
             .sort((a, b) => a.localeCompare(b))
     }
 
-    public static async listAll(): Promise<{ id: string, version: string, status: string }[]> {
+    public static async listAll(tagConfigPath?: string): Promise<{ id: string, version: string, status: string, tags: string }[]> {
         const ids = await Engine.getAllIds()
+        const tagConfig = loadTagConfig(tagConfigPath)
 
         return await Promise.all(ids.map(async id => {
             const engine = new Engine(id)
@@ -81,7 +81,8 @@ export class Engine {
             return {
                 id,
                 version: engine.config.version,
-                status: ready ? `✔️ ready` : "🛠️ requires setup",
+                status: ready ? `✔️ ready` : "️ requires setup",
+                tags: getTagsForId(tagConfig.engines, id).join(", "),
             }
         }))
     }
@@ -94,15 +95,12 @@ export class Engine {
             const enginePath = resolve(CACHE_PATH, this.ref.object.sha)
 
             // download source code if not available
-            if (existsSync(enginePath))
-                logger.info("> Source code found in cache")
-            else
-                await this.download()
+            if (existsSync(enginePath)) logger.info("> Source code found in cache")
+            else await this.download()
         }
 
         // build Docker image
         await this.build()
-
         logger.info(`Engine ${this.config.name} has been setup successfully`)
     }
 
@@ -119,15 +117,14 @@ export class Engine {
             if (this.config.clone) {
                 logger.info("> Cloning source code")
                 await github.clone(this.config.repository, {branch: this.config.version, depth: 1}, downloadPath)
-
             } else {
                 logger.info("> Downloading source code")
                 let file: string
+
                 if (this.config.source) {
                     file = resolve(tmpPath, this.config.source.split("/").pop() as string)
                     await download(this.config.source, file)
-                } else
-                    file = await github.downloadTarball(this.config.repository, this.ref, tmpPath)
+                } else file = await github.downloadTarball(this.config.repository, this.ref, tmpPath)
 
                 logger.info("> Extracting source code")
                 await extractArchive(file, downloadPath)
@@ -136,7 +133,6 @@ export class Engine {
             // move source code out of tmp folder
             const srcDir = (await readdir(downloadPath))[0]
             await rename(resolve(downloadPath, srcDir), destinationPath)
-
         } finally {
             await rm(tmpPath, {recursive: true})
         }
@@ -146,6 +142,7 @@ export class Engine {
         if (!this.ref) this.ref = await this.fetchRef()
 
         logger.info("> Building image (this may take a while)")
+
         const srcPath = `cache/${this.ref.object.sha}`
         const dockerfile = `${this.id}/Dockerfile`
         const buildStream = await docker.buildImage({
@@ -158,29 +155,25 @@ export class Engine {
         })
 
         await new Promise((resolve, reject) => {
-            docker.modem.followProgress(buildStream,
-                (err, res) => {
-                    if (err) reject(err)
-                    else {
-                        logger.clearLine()
-                        resolve(res)
-                    }
-                },
-                progress => {
-                    if (progress.stream) {
-                        const match = progress.stream.match(/^Step (\d+)\/(\d+)/)
-                        if (match) {
-                            logger.info("  > " + progress.stream.trim(), {raw: true, clearLine: true})
-                        } else
-                            logger.debug("  > " + progress.stream, {raw: true})
-                    } else if (progress.error) {
-                        logger.clearLine()
-                        logger.error(progress.error)
-                        logger.error(progress.errorDetail)
-                        reject(progress.error)
-                    } else
-                        logger.debug(progress)
-                })
+            docker.modem.followProgress(buildStream, (err, res) => {
+                if (err) reject(err)
+                else {
+                    logger.clearLine()
+                    resolve(res)
+                }
+            }, progress => {
+                if (progress.stream) {
+                    const match = progress.stream.match(/^Step (\d+)\/(\d+)/)
+                    if (match) {
+                        logger.info(" > " + progress.stream.trim(), {raw: true, clearLine: true})
+                    } else logger.debug(" > " + progress.stream, {raw: true})
+                } else if (progress.error) {
+                    logger.clearLine()
+                    logger.error(progress.error)
+                    logger.error(progress.errorDetail)
+                    reject(progress.error)
+                } else logger.debug(progress)
+            })
         })
 
         logger.info("> Removing build cache", {clearLine: true})
@@ -192,23 +185,19 @@ export class Engine {
      */
     public async run() {
         logger.info(`Running engine ${this.name}`)
-
-        const [{StatusCode: exitCode}] = await docker.run(this.imageName, [],
-            [logger.stream.info, logger.stream.error],
-            {Tty: false, HostConfig: {AutoRemove: true, SecurityOpt: ["seccomp=unconfined"]}})
-
-        if (exitCode !== 0)
-            throw new Error("Failed to run engine")
+        const [{StatusCode: exitCode}] = await docker.run(this.imageName, [], [logger.stream.info, logger.stream.error], {
+            Tty: false,
+            HostConfig: {AutoRemove: true, SecurityOpt: ["seccomp=unconfined"]},
+        })
+        if (exitCode !== 0) throw new Error("Failed to run engine")
     }
 
     private async fetchRef() {
-        if (this.config.sha)
-            return {object: {sha: this.config.sha}}
+        if (this.config.sha) return {object: {sha: this.config.sha}}
 
         logger.info("> Fetching repository")
         const ref = await github.getRef(this.config.repository, {tags: this.config.version})
-        if (!ref.object?.sha)
-            throw new Error(`Invalid git tag: ${this.config.version} (use the 'sha' property to override tag)`)
+        if (!ref.object?.sha) throw new Error(`Invalid git tag: ${this.config.version} (use the 'sha' property to override tag)`)
         return ref
     }
 }
