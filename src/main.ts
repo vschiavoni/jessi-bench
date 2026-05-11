@@ -109,7 +109,9 @@ engineCmd
     .description("List all available JavaScript engines")
     .summary("list available engines")
     .option("--tag-config <file>", "path to the persistent tag configuration file", DEFAULT_TAG_CONFIG_FILE)
-    .action(actionWrapper(async () => logger.table(await Engine.listAll(options.tagConfig))))
+    .action(actionWrapper(async (options: OptionValues) => {
+        logger.table(await Engine.listAll(options.tagConfig))
+    }))
 
 engineCmd
     .command("setup")
@@ -129,7 +131,9 @@ workloadCmd
     .description("List all available workloads")
     .summary("list available workloads")
     .option("--tag-config <file>", "path to the persistent tag configuration file", DEFAULT_TAG_CONFIG_FILE)
-    .action(actionWrapper(async () => logger.table(await Workload.listAll(options.tagConfig))))
+    .action(actionWrapper(async (options: OptionValues) => {
+        logger.table(await Workload.listAll(options.tagConfig))
+    }))
 
 const tagCmd = program
     .command("tag")
